@@ -2,6 +2,17 @@ class Env_Three:
     def __init__(self) -> object:
         self.start = [-10, -9]
         self.goal = [9, 10]
+        # Multi-AUV support: keep single-AUV start/goal and provide starts/goals lists.
+        self.starts = [
+            [-10, -9],
+            [-10, 8],
+            [8, -10]
+        ]
+        self.goals = [
+            [9, 10],
+            [9, -8],
+            [-9, 8]
+        ]
         self.delta = 0
         self.obs_boundary = self.obs_boundary()
         self.obs_circle = self.obs_circle()

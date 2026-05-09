@@ -17,6 +17,14 @@ class mapTwo:
     def __init__(self) -> object:
         self.start = [30.25, 20.25]
         self.goal = [33.7, 22.5]
+        self.starts = [
+            [30.25, 20.25],
+            [30.1, 22.3]
+        ]
+        self.goals = [
+            [33.7, 22.5],
+            [33.4, 20.4]
+        ]
 
 
     def getObstacles(self):
@@ -28,5 +36,4 @@ class mapTwo:
             # Obstacle(32.7, 21.5, 0, 0, 0.15),
             Obstacle(33.5, 21.7, 0, 0, 0.32),
         ]
-
 

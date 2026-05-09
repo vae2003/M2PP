@@ -7,13 +7,16 @@ from config.Grid import Grid_Map
 from config.Plotting import Plotting
 from config.Tree import TreeNode, Tree
 from config.Utils import Utils
+from config.TaskAllocation import assign_tasks_min_cost
+from config.ConflictResolver import ConflictResolver
 
 from config.Particle import Particle, Point
 from mapData.map_three import Env_Three
 from config.Boundary import getBoundary
 
 class MMPSO:
-    def __init__(self, pointNum, popSize, maxIter, env, a, b, line):
+    def __init__(self, pointNum, popSize, maxIter, env, a, b, line,
+                 starts=None, goals=None, num_auvs=1, safety_distance=1.0):
         self.startPoint = env.start  # 起点
         self.goalPoint = env.goal  # 终点
         self.maxIter = maxIter  # 迭代次数
@@ -39,11 +42,27 @@ class MMPSO:
 
         self.top, self.bottom = getBoundary(env)
 
-        self.slope = (self.goalPoint[1] - self.startPoint[1]) / (self.goalPoint[0] - self.startPoint[0])  # 起终点斜率
+        # Avoid division by zero for vertical start-goal lines.
+        if self.goalPoint[0] == self.startPoint[0]:
+            self.slope = float('inf')
+        else:
+            self.slope = (self.goalPoint[1] - self.startPoint[1]) / (self.goalPoint[0] - self.startPoint[0])
 
         self.grid = Grid_Map(env, left=self.startPoint[0], right=self.goalPoint[0], bottom=self.bottom, top=self.top)
 
         self.result = []
+
+        self.num_auvs = num_auvs
+        self.starts = starts if starts is not None else getattr(env, "starts", [self.startPoint])
+        self.goals = goals if goals is not None else getattr(env, "goals", [self.goalPoint])
+        self.safety_distance = safety_distance
+        self.coordination_paths = []
+        self.coordination_penalty = env.cost
+
+    def set_coordination_context(self, other_paths=None, safety_distance=None):
+        self.coordination_paths = other_paths if other_paths is not None else []
+        if safety_distance is not None:
+            self.safety_distance = safety_distance
 
     # 粒子群算法主流程
     def mainAlgorithm(self):
@@ -133,7 +152,23 @@ class MMPSO:
         cost = 0
         for i in range(self.pointNum + 1):
             cost += self.pointCost(particle.position[i], particle.position[i + 1])
+        cost += self.inter_auv_cost(particle.position)
         return cost
+
+    def inter_auv_cost(self, path):
+        if not self.coordination_paths:
+            return 0
+
+        penalty = 0
+        for other_path in self.coordination_paths:
+            if not other_path:
+                continue
+            same_len = min(len(path), len(other_path))
+            for i in range(same_len):
+                d = math.hypot(path[i][0] - other_path[i][0], path[i][1] - other_path[i][1])
+                if d < self.safety_distance:
+                    penalty += self.coordination_penalty * (self.safety_distance - d + 1)
+        return penalty
 
     def pointCost(self, backPosition, prePosition):
         # 欧式距离
@@ -209,10 +244,14 @@ class MMPSO:
     # 斜率代价计算
     def slope_cost(self, backPosition, prePosition):
         if backPosition[0] == prePosition[0]:
-            return 0
+            slope = float('inf')
         else:
             slope = (backPosition[1] - prePosition[1]) / (backPosition[0] - prePosition[0])
-            return abs(slope - self.slope)
+        if math.isinf(self.slope) and math.isinf(slope):
+            return 0
+        if math.isinf(self.slope) or math.isinf(slope):
+            return 1
+        return abs(slope - self.slope)
 
     # 障碍物贴近计算
     def obstacle_recent_cost(self, backPosition, prePosition):
@@ -369,12 +408,72 @@ class MMPSO:
         return random.uniform(left, right), random.uniform(bottom, top)
 
 
+class MultiAUVMMPSO:
+    def __init__(self, pointNum, popSize, maxIter, env, a, b, line, starts=None, goals=None, safety_distance=1.0):
+        self.pointNum = pointNum
+        self.popSize = popSize
+        self.maxIter = maxIter
+        self.env = env
+        self.a = a
+        self.b = b
+        self.line = line
+        self.safety_distance = safety_distance
+
+        self.starts = starts if starts is not None else getattr(env, "starts", [env.start])
+        self.goals = goals if goals is not None else getattr(env, "goals", [env.goal])
+        if len(self.starts) != len(self.goals):
+            raise ValueError(f"starts and goals must have same length, got {len(self.starts)} and {len(self.goals)}")
+
+        self.allocated_goals, self.assignment = assign_tasks_min_cost(self.starts, self.goals)
+        self.conflict_resolver = ConflictResolver(safe_distance=safety_distance)
+        self.planners = self._build_planners()
+        self.best_paths = []
+
+    def _build_planners(self):
+        planners = []
+        for i in range(len(self.starts)):
+            env_i = copy.deepcopy(self.env)
+            env_i.start = list(self.starts[i])
+            env_i.goal = list(self.allocated_goals[i])
+            planner = MMPSO(
+                self.pointNum, self.popSize, self.maxIter, env_i, self.a, self.b, self.line,
+                starts=self.starts, goals=self.allocated_goals, num_auvs=len(self.starts),
+                safety_distance=self.safety_distance
+            )
+            planners.append(planner)
+        return planners
+
+    def mainAlgorithm(self):
+        best_particles = []
+        for planner in self.planners:
+            best_particles.append(planner.mainAlgorithm())
+
+        # Second-round coordinated optimization with inter-AUV path penalties.
+        raw_paths = [particle.bestPos for particle in best_particles]
+        coordinated_particles = []
+        for i, planner in enumerate(self.planners):
+            planner.bestParticle = Particle()
+            other_paths = [raw_paths[j] for j in range(len(raw_paths)) if j != i]
+            planner.set_coordination_context(other_paths, self.safety_distance)
+            coordinated_particles.append(planner.mainAlgorithm())
+
+        raw_paths = [particle.bestPos for particle in coordinated_particles]
+        self.best_paths = self.conflict_resolver.apply_priority_wait(raw_paths)
+        return self.best_paths
+
+
 if __name__ == '__main__':
     env = Env_Three()
-    PSOAlgorithm = MMPSO(6, 100, 100, env, 0.1, 1, 0.2)
-    traj = PSOAlgorithm.mainAlgorithm().bestPos
-    print(traj)
-    path = []
-    for i in range(PSOAlgorithm.pointNum + 2):
-        path.append(Point(traj[i]))
-    PSOAlgorithm.plotting.animation([], path, '', [], 'MPPSO', animation=True)
+    if hasattr(env, "starts") and hasattr(env, "goals") and len(env.starts) > 1:
+        multi = MultiAUVMMPSO(6, 100, 100, env, 0.1, 1, 0.2)
+        paths = multi.mainAlgorithm()
+        print(paths)
+        Plotting(env.start, env.goal, env).animation_multi(paths, multi.starts, multi.allocated_goals, 'MPPSO-Multi')
+    else:
+        PSOAlgorithm = MMPSO(6, 100, 100, env, 0.1, 1, 0.2)
+        traj = PSOAlgorithm.mainAlgorithm().bestPos
+        print(traj)
+        path = []
+        for i in range(PSOAlgorithm.pointNum + 2):
+            path.append(Point(traj[i]))
+        PSOAlgorithm.plotting.animation([], path, '', [], 'MPPSO', animation=True)

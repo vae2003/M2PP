@@ -23,6 +23,11 @@ class Plotting:
         plt.show()
         # self.plot_Smooth_Path2(smoothPath2)
 
+    def animation_multi(self, paths, starts, goals, name):
+        self.plot_grid(name)
+        self.plot_multi_paths(paths, starts, goals)
+        plt.show()
+
     def plot_grid(self, name):
         fig, ax = plt.subplots()
 
@@ -105,6 +110,20 @@ class Plotting:
         #plt.show()
 
     @staticmethod
+    def plot_multi_paths(paths, starts, goals):
+        colors = ['r', 'b', 'g', 'm', 'c', 'y']
+        for i, path in enumerate(paths):
+            if not path:
+                continue
+            color = colors[i % len(colors)]
+            plt.plot([p[0] for p in path], [p[1] for p in path], f'-{color}', linewidth=2, label=f"AUV-{i} path")
+            if i < len(starts):
+                plt.plot(starts[i][0], starts[i][1], marker='s', color=color, markersize=6)
+            if i < len(goals):
+                plt.plot(goals[i][0], goals[i][1], marker='*', color=color, markersize=8)
+        plt.legend(loc='best')
+
+    @staticmethod
     def plot_Smooth_Path(smoothPath):
         plt.plot(smoothPath.T[0], smoothPath.T[1], 'b', linewidth=1.5, label="Bezier smoothing path")
 
@@ -113,5 +132,4 @@ class Plotting:
         plt.plot(smoothPath.T[0], smoothPath.T[1], 'k', linewidth=1.5, label="B-spline")
         plt.legend()
         plt.show()
-
 
