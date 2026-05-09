@@ -49,6 +49,7 @@ beta = 1
 gamma = 1
 delta = 0.9
 theta = 0.2
+EPSILON = 1e-9
 
 
 # 机器人运动模型
@@ -135,7 +136,7 @@ def isSafe(trajectory, obstacles, robot_radius):
     return 0
 
 
-# 评估轨迹
+# Evaluate trajectory
 def evaluate_trajectory(state, v, omega, params, goal, obstacles):
     predict_state = RobotState(state.x, state.y, state.yaw, v, omega)
     trajectory = [np.array([predict_state.x, predict_state.y, predict_state.yaw, predict_state.v, predict_state.omega])]
@@ -211,10 +212,11 @@ def dwa_control(state, params, goal, obstacles):
             if isWindow(state, obstacles, trajectory, params.robot_radius):
                 dynamic_state = True
 
-    sum_heading = max(sum_heading, 1e-9)
-    sum_dist = max(sum_dist, 1e-9)
-    sum_vel = max(sum_vel, 1e-9)
-    sum_corn = max(sum_corn, 1e-9)
+    # Prevent normalization denominator from being zero.
+    sum_heading = max(sum_heading, EPSILON)
+    sum_dist = max(sum_dist, EPSILON)
+    sum_vel = max(sum_vel, EPSILON)
+    sum_corn = max(sum_corn, EPSILON)
 
     for v in np.arange(dw[0], dw[1], params.v_resolution):
         for omega in np.arange(dw[2], dw[3], params.yaw_rate_resolution):
@@ -304,7 +306,7 @@ def visualize(states, trajectories, starts, goals, paths, obstacles, waypoint_ta
 
 
 # 主程序
-# global_paths: 可选，每个AUV一条waypoint列表，例如 [[[x1,y1],[x2,y2],...], ...]
+# global_paths: 可选, 每个AUV一条waypoint列表, 例如 [[[x1,y1],[x2,y2],...], ...]
 def main(global_paths=None):
     mapData = mapTwo()
     static_obstacles = mapData.getObstacles()

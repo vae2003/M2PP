@@ -12,8 +12,9 @@ class ConflictResolver:
         if len(path) >= target_len:
             return path[:target_len]
         result = []
+        denominator = max(1, target_len - 1)
         for i in range(target_len):
-            idx = int(round(i * (len(path) - 1) / max(1, target_len - 1)))
+            idx = int(round(i * (len(path) - 1) / denominator))
             result.append(path[idx])
         return result
 
@@ -43,7 +44,7 @@ class ConflictResolver:
 
     def apply_priority_wait(self, paths):
         """
-        按 AUV 编号优先级处理冲突：编号大者在冲突时刻插入等待点。
+        Resolve conflicts by AUV index priority; higher-index AUV inserts a wait point.
         """
         if len(paths) < 2:
             return paths

@@ -2,7 +2,7 @@ class Env_Three:
     def __init__(self) -> object:
         self.start = [-10, -9]
         self.goal = [9, 10]
-        # 多AUV支持：保留单AUV start/goal，同时提供 starts/goals 列表
+        # Multi-AUV support: keep single-AUV start/goal and provide starts/goals lists.
         self.starts = [
             [-10, -9],
             [-10, 8],

@@ -42,10 +42,11 @@ class MMPSO:
 
         self.top, self.bottom = getBoundary(env)
 
+        # Avoid division by zero for vertical start-goal lines.
         if self.goalPoint[0] == self.startPoint[0]:
-            self.slope = 0
+            self.slope = float('inf')
         else:
-            self.slope = (self.goalPoint[1] - self.startPoint[1]) / (self.goalPoint[0] - self.startPoint[0])  # 起终点斜率
+            self.slope = (self.goalPoint[1] - self.startPoint[1]) / (self.goalPoint[0] - self.startPoint[0])
 
         self.grid = Grid_Map(env, left=self.startPoint[0], right=self.goalPoint[0], bottom=self.bottom, top=self.top)
 
@@ -243,10 +244,14 @@ class MMPSO:
     # 斜率代价计算
     def slope_cost(self, backPosition, prePosition):
         if backPosition[0] == prePosition[0]:
-            return 0
+            slope = float('inf')
         else:
             slope = (backPosition[1] - prePosition[1]) / (backPosition[0] - prePosition[0])
-            return abs(slope - self.slope)
+        if math.isinf(self.slope) and math.isinf(slope):
+            return 0
+        if math.isinf(self.slope) or math.isinf(slope):
+            return 1
+        return abs(slope - self.slope)
 
     # 障碍物贴近计算
     def obstacle_recent_cost(self, backPosition, prePosition):
@@ -417,7 +422,7 @@ class MultiAUVMMPSO:
         self.starts = starts if starts is not None else getattr(env, "starts", [env.start])
         self.goals = goals if goals is not None else getattr(env, "goals", [env.goal])
         if len(self.starts) != len(self.goals):
-            raise ValueError("starts and goals must have same length")
+            raise ValueError(f"starts and goals must have same length, got {len(self.starts)} and {len(self.goals)}")
 
         self.allocated_goals, self.assignment = assign_tasks_min_cost(self.starts, self.goals)
         self.conflict_resolver = ConflictResolver(safe_distance=safety_distance)
@@ -443,7 +448,7 @@ class MultiAUVMMPSO:
         for planner in self.planners:
             best_particles.append(planner.mainAlgorithm())
 
-        # 第二轮协同优化：将其他AUV轨迹加入代价函数
+        # Second-round coordinated optimization with inter-AUV path penalties.
         raw_paths = [particle.bestPos for particle in best_particles]
         coordinated_particles = []
         for i, planner in enumerate(self.planners):

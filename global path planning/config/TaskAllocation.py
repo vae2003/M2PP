@@ -7,8 +7,8 @@ def _distance(p1, p2):
 
 def assign_tasks_min_cost(starts, goals):
     """
-    将 goals 分配给 starts，返回与 starts 对齐的 goal 列表以及目标索引映射。
-    使用全排列穷举，适合小规模 AUV 数量场景。
+    Assign goals to starts and return a goal list aligned to starts plus index mapping.
+    Uses full permutation search, suitable for small-scale AUV counts.
     """
     if len(starts) != len(goals):
         raise ValueError("starts and goals must have the same length")
